@@ -5,4 +5,4 @@ rvdb_SOURCES = \
     cli.c cli.h data.c data.h \
     debug.c debug.h file_io.c file_io.h \
     main.c serial.c serial.h types.h \
-    util.c util.h
+    util.c util.h pollLib.c pollLib.h

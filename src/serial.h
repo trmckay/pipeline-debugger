@@ -21,5 +21,6 @@ typedef struct termios term_sa;
 int open_serial(char *path, int *serial_port);
 int send_word(int serial_port, word_t w);
 int read_word(int serial_port, word_t *w);
+int read_string(int serial_port, char *data);
 
 #endif

@@ -3,15 +3,16 @@
 #include "debug.h"
 #include "types.h"
 #include "util.h"
+#include "pollLib.h"
+#include "serial.h"
 #include <pwd.h>
-#include <readline/history.h>
-#include <readline/readline.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <unistd.h>
 
 // DESCRIPTION: takes the command as a string, and applies it to the serial port
 // RETURNS: 0 for success, non-zero for error
@@ -305,10 +306,33 @@ int parse_cmd(char *line, target_t *tg) {
     return EXIT_FAILURE;
 }
 
+void receive_otter_input(int serial_port) {
+    char buffer[MAX_RECEIVE_LEN];
+
+    if (read_string(serial_port, buffer) != 0) {
+        return;
+    }
+
+    printf("OTTER: %s\n", buffer);
+}
+
+void readFromStdin(char *buffer) {
+    int len;
+
+    if (fgets(buffer, MAX_INPUT_LEN, stdin) == NULL) {
+        perror("fgets");
+        exit(-1);
+    }
+
+    // remove \n
+    len = strlen(buffer);
+    buffer[len-1] = '\0';
+}
+
 // DESCRIPTION: launches a debugger command line interface (a la GDB)
 //   on the device at the designated serial port
 void debug_cli(char *path, int serial_port) {
-    char *line;
+    char line[MAX_INPUT_LEN];
     int err = 0;
 
     // create and populate a hash table of variables
@@ -346,8 +370,13 @@ void debug_cli(char *path, int serial_port) {
     tg.bp_cap = MAX_BREAK_PTS;
     tg.pipe = 0;
 
-    printf("\n" CYAN "UART Debugger\n" RESET);
+    printf("\n" CYAN "UART Debugger/Receiver\n" RESET);
     printf("Enter 'h' for usage details.\n");
+
+    // create a pollset to poll stdin and the serial port
+    setupPollSet();
+    addToPollSet(STDIN_FILENO);
+    addToPollSet(serial_port);
 
     // run until EOD is read
     while (1) {
@@ -357,39 +386,45 @@ void debug_cli(char *path, int serial_port) {
             printf(" (paused)\n");
         else
             printf("\n");
-        line = (err) ? readline(RED "$ " RESET) : readline(GREEN "$ " RESET);
 
-        if (line[0] == '!') {
-            err = 0;
-            system(line + 1);
+        if (err)
+            printf(RED "$ " RESET);
+        else
+            printf(GREEN "$ " RESET);
+        fflush(stdout); // flush stdout to display the prompt
+        memset(line, 0, MAX_INPUT_LEN);
+
+        if (pollCall(-1) == STDIN_FILENO) {
+            // User has entered input
+            readFromStdin(line);
+
+            if (line[0] == '!') {
+                err = 0;
+                system(line + 1);
+            }
+
+            // help message
+            else if (match_strs(line, "h")) {
+                HELP_MSG;
+                err = 0;
+            }
+
+            // quit/exit
+            else if (match_strs(line, "q")) {
+                ht_destroy(vars_ht, keys, vc);
+                return;
+            } else if (match_strs(line, "exit")) {
+                ht_destroy(vars_ht, keys, vc);
+                return;
+            } else {
+                err = parse_cmd(line, &tg);
+            }
+
+        } else {
+            // Otter is talking
+            receive_otter_input(serial_port);
         }
 
-        // help message
-        else if (match_strs(line, "h")) {
-            HELP_MSG;
-            err = 0;
-        }
-
-        // quit/exit
-        else if (match_strs(line, "q")) {
-            free(line);
-            ht_destroy(vars_ht, keys, vc);
-            return;
-        } else if (match_strs(line, "exit")) {
-            free(line);
-            ht_destroy(vars_ht, keys, vc);
-            return;
-        } else if (!line) {
-            free(line);
-            ht_destroy(vars_ht, keys, vc);
-            return;
-        } else if (*line) {
-            add_history(line);
-            err = parse_cmd(line, &tg);
-        }
-
-        // don't forget to free!
-        free(line);
-        line = (char *)NULL;
+        
     }
 }

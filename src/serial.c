@@ -107,6 +107,23 @@ int send_word(int serial_port, word_t w) {
     return 0;
 }
 
+// read a byte from thhe device and return 0 if successful
+int recv_byte(int serial_port, byte_t *byte) {
+    ssize_t br;
+
+    br = read(serial_port, byte, 1);
+
+    if (br == -1) {
+        perror("read(serial_port)");
+        exit(-1);
+    }
+    if (br == 0) {
+        fprintf(stderr, "Error: read 0 bytes from serial_port\n");
+        return 1;
+    }
+    return 0;
+}
+
 // read a word from the device and return 0 if successful
 int recv_word(int serial_port, word_t *word) {
     word_t w;
@@ -161,4 +178,22 @@ int read_word(int serial_port, word_t *word) {
         return 0;
     }
     return 1;
+}
+
+// reads bytes from the serial port until it reaches a null terminator
+// this depends on the otter programmer sending a 0 to not get stuck, could be improved to timeout
+// returns 0 on success
+int read_string(int serial_port, char *data) {
+    int i;
+    byte_t byte;
+    i = 0;
+
+    do {
+        if (recv_byte(serial_port, &byte) != 0) {
+            return 1;
+        }
+        data[i++] = (char)byte;
+    } while(byte != '\0');
+
+    return 0;
 }

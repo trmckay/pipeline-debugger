@@ -12,6 +12,10 @@
 #define MAX_BREAK_PTS 8
 #define MAX_VAR_COUNT 256
 
+#define MAX_RECEIVE_LEN 1024
+
+#define MAX_INPUT_LEN 1024
+
 #define REL_CONFIG_PATH "/.config/rvdb/config"
 
 #define CTEST_TOKEN "t"
